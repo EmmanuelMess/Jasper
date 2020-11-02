@@ -9,6 +9,7 @@ INTERPRETER := jasperi
 TEST       := run_tests
 
 CXXFLAGS := -std=c++14 -Wall
+INCLUDES := -I./rapidcheck/include
 LIBS :=
 
 COMMON_DIR := .
@@ -62,12 +63,14 @@ ifeq ($(MODE),debug)
   CXXFLAGS += -g -fsanitize=address
   LIBS += -lasan
   BUILD_DIR := $(BUILD_BASE_DIR)/debug
+  LIBS += -lrapidcheck -L$(BUILD_DIR)/rapidcheck
 else ifeq ($(MODE),tuning)
   CXXFLAGS += -O2 -g -fno-omit-frame-pointer
   BUILD_DIR := $(BUILD_BASE_DIR)/tuning
 else ifeq ($(MODE),dev)
   CXXFLAGS += -O0
   BUILD_DIR := $(BUILD_BASE_DIR)/dev
+  LIBS += -lrapidcheck -L$(BUILD_DIR)/rapidcheck
 else
   CXXFLAGS += -O3
   BUILD_DIR := $(BUILD_BASE_DIR)/release
@@ -102,12 +105,13 @@ all: $(INTERPRETER_BIN)
 
 clean:
 	rm -r $(BUILD_BASE_DIR)
+
 .PHONY: clean
 
 interpreter: $(INTERPRETER_BIN)
 .PHONY: interpreter
 
-tests: $(TEST_BIN)
+tests: $(BUILD_DIR)/librapidcheck.a $(TEST_BIN)
 .PHONY: tests
 
 $(TEST_BIN): $(TEST_ENTRY_OBJECT) $(TEST_OBJECTS) $(INTERPRETER_OBJECTS) $(COMMON_OBJECTS)
@@ -120,18 +124,24 @@ include $(DEPS)
 $(TEST_BIN) $(INTERPRETER_BIN):
 	$(SHOW_CXX) $@
 	@mkdir -p $(dir $@)
-	@$(CXX) -o $@ $^ $(LIBS)
+	@$(CXX) $(INCLUDES) -o $@ $^ $(LIBS)
+
+$(BUILD_DIR)/librapidcheck.a:
+	@mkdir -p $(dir $@)/rapidcheck
+	$(SHOW_CXX) $(pwd)
+	cmake rapidcheck -B$(BUILD_DIR)/rapidcheck
+	cd $(BUILD_DIR)/rapidcheck && make all
 
 $(BUILD_DIR)/%.o: $(SOURCE_DIR)/%.cpp
 	$(SHOW_CXX) $@
 	@mkdir -p $(dir $@)
-	@$(CXX) $(CXXFLAGS) -c -o $@ $<
+	@$(CXX) $(INCLUDES) $(CXXFLAGS) -c -o $@ $<
 
 $(BUILD_DIR)/%.d: $(SOURCE_DIR)/%.cpp
 	@#$(SHOW_DEPS) $@
 	@mkdir -p $(dir $@)
 	@set -e; rm -f $@; \
-	$(CXX) -MM $(CPPFLAGS) $< > $@.$$$$; \
+	$(CXX) $(INCLUDES) -MM $(CPPFLAGS) $< > $@.$$$$; \
 	sed 's,\($(*F)\)\.o[ :]*,$(BUILD_DIR)/$*.o $@ : ,g' < $@.$$$$ > $@; \
 	rm -f $@.$$$$
 
